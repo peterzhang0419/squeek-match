@@ -35,4 +35,4 @@ It is a single static file: `index.html`. Host it anywhere static:
 Squeek Match is an independent mini-game built on public Squeekchain (Sepolia)
 contracts, created for the Squeekchain Genesis builder program.
 
-<!-- SQUEEKCHAIN-REPOSITORY-LINE: the exact repository line provided during Genesis verification goes here -->
+squeekchain-project: 95e1b81e-6adf-4713-a8c0-ab28a7de1c45
