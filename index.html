@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Squeek Match — a memory game dealt live from Squeekchain</title>
+<meta name="description" content="A memory matching game whose cards are real Squeek NFTs, loaded live from the Squeekchain Sepolia contract.">
+<!-- SQUEEKCHAIN-VERIFY-TAG: the page tag provided during Genesis verification goes here -->
+<style>
+  :root{
+    --bg:#17122b; --panel:#221a3f; --panel2:#2b2152; --ink:#f4efff; --dim:#b7aede;
+    --accent:#ffb340; --accent2:#7be0c3; --bad:#ff7a7a; --card:#322763;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+       background:radial-gradient(1000px 600px at 70% -10%,#372a6b 0%,var(--bg) 55%);color:var(--ink);min-height:100vh}
+  .wrap{max-width:880px;margin:0 auto;padding:20px 16px 48px}
+  header{text-align:center;padding:14px 0 4px}
+  h1{font-size:2rem;margin:0;letter-spacing:.5px}
+  h1 .w{color:var(--accent)}
+  .sub{color:var(--dim);margin:8px auto 0;max-width:560px;line-height:1.5;font-size:.95rem}
+  .chainbar{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:16px 0 4px;font-size:.85rem}
+  .chip{background:var(--panel);border:1px solid #453a7d;border-radius:999px;padding:6px 12px;color:var(--dim)}
+  .chip b{color:var(--ink)}
+  .chip a{color:var(--accent2);text-decoration:none}
+  .controls{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:18px 0}
+  button{background:var(--accent);color:#241505;border:0;border-radius:12px;padding:11px 18px;
+         font-size:1rem;font-weight:700;cursor:pointer}
+  button.ghost{background:var(--panel2);color:var(--ink);border:1px solid #453a7d;font-weight:600}
+  button:disabled{opacity:.5;cursor:wait}
+  select, input[type=text]{background:var(--panel);color:var(--ink);border:1px solid #453a7d;border-radius:12px;
+         padding:11px 12px;font-size:1rem}
+  input[type=text]{width:min(430px,90vw)}
+  .stats{display:flex;gap:18px;justify-content:center;color:var(--dim);font-size:.95rem;min-height:1.4em}
+  .stats b{color:var(--ink)}
+  #status{text-align:center;color:var(--accent2);min-height:1.5em;margin:6px 0}
+  #board{display:grid;gap:10px;margin:16px auto;max-width:640px}
+  #board.p6{grid-template-columns:repeat(4,1fr)}
+  #board.p8{grid-template-columns:repeat(4,1fr)}
+  @media (max-width:520px){#board{gap:7px}}
+  .card{aspect-ratio:1/1;perspective:600px;cursor:pointer;background:none;border:0;padding:0}
+  .inner{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .45s}
+  .card.flip .inner{transform:rotateY(180deg)}
+  .face{position:absolute;inset:0;border-radius:14px;backface-visibility:hidden;-webkit-backface-visibility:hidden;
+        display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .back{background:linear-gradient(145deg,#3a2b78,#2b2152);border:2px solid #55489a;font-size:1.9rem}
+  .front{background:var(--card);border:2px solid #55489a;transform:rotateY(180deg);flex-direction:column}
+  .front img{width:100%;height:100%;object-fit:cover;display:block}
+  .card.matched{cursor:default}
+  .card.matched .front{border-color:var(--accent2);box-shadow:0 0 0 2px var(--accent2) inset}
+  .mine{display:none;gap:8px;justify-content:center;flex-wrap:wrap;margin:4px 0 8px}
+  .mine.show{display:flex}
+  dialog{background:var(--panel);color:var(--ink);border:1px solid #55489a;border-radius:18px;max-width:560px;width:92vw}
+  dialog::backdrop{background:rgba(8,5,20,.7)}
+  .winlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:14px 0}
+  .winitem{background:var(--panel2);border-radius:12px;padding:8px;font-size:.8rem;color:var(--dim)}
+  .winitem img{width:100%;border-radius:8px;display:block}
+  .winitem b{color:var(--ink)}
+  .winitem a{color:var(--accent2);text-decoration:none}
+  footer{color:var(--dim);font-size:.82rem;text-align:center;margin-top:28px;line-height:1.6}
+  footer a{color:var(--accent2);text-decoration:none}
+  .err{color:var(--bad)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🐹 Squeek <span class="w">Match</span></h1>
+    <p class="sub">A memory matching game dealt <b>live from the blockchain</b>. Every card is a real
+      <b>Squeek NFT</b>, loaded straight from the Squeekchain contract on Sepolia — no two games use the same deck.</p>
+  </header>
+
+  <div class="chainbar">
+    <span class="chip">Squeeks minted on-chain: <b id="supply">…</b></span>
+    <span class="chip">Contract: <a id="contractLink" target="_blank" rel="noopener">0xc4c7…856b</a></span>
+    <span class="chip">Network: Sepolia testnet</span>
+  </div>
+
+  <div class="controls">
+    <select id="pairs" aria-label="Pairs">
+      <option value="6">6 pairs · easy</option>
+      <option value="8" selected>8 pairs · classic</option>
+    </select>
+    <button id="deal">Deal a new game</button>
+    <button id="mineBtn" class="ghost">Play with my Squeeks</button>
+  </div>
+  <div class="mine" id="mineRow">
+    <input type="text" id="addr" placeholder="Your wallet address (0x…) — read-only, nothing is signed">
+    <button id="loadMine" class="ghost">Load my Squeeks</button>
+  </div>
+
+  <div class="stats">
+    <span>Moves: <b id="moves">0</b></span>
+    <span>Matched: <b id="found">0</b>/<b id="total">8</b></span>
+    <span>Time: <b id="time">0:00</b></span>
+    <span>Best: <b id="best">—</b></span>
+  </div>
+  <div id="status">Loading the deck from Squeekchain…</div>
+  <div id="board" class="p8"></div>
+
+  <footer>
+    Squeek Match is an independent mini-game built on public Squeekchain (Sepolia) contracts.
+    Card art and traits are read from each NFT's on-chain metadata.<br>
+    Explorer: <a href="https://eth-sepolia.blockscout.com/token/0xc4c7982657f00509548f3a3a41db7fa439a6856b" target="_blank" rel="noopener">Squeeks contract</a> ·
+    Play Squeekchain: <a href="https://sepolia.squeekchain.com" target="_blank" rel="noopener">sepolia.squeekchain.com</a>
+  </footer>
+</div>
+
+<dialog id="win">
+  <h2 style="margin-top:0">🎉 You cleared the wheel!</h2>
+  <p id="winStats"></p>
+  <p style="color:var(--dim);font-size:.9rem">Your deck — real Squeeks, straight off the chain:</p>
+  <div class="winlist" id="winList"></div>
+  <div style="text-align:center"><button id="again">Play again</button></div>
+</dialog>
+
+<script>
+"use strict";
+const NFT = "0xc4c7982657f00509548f3a3a41db7fa439a6856b";
+const RPCS = [
+  "https://ethereum-sepolia-rpc.publicnode.com",
+  "https://sepolia.drpc.org",
+  "https://1rpc.io/sepolia"
+];
+const SEL = {
+  totalSupply: "0x18160ddd",
+  tokenURI: "0xc87b56dd",
+  balanceOf: "0x70a08231"
+};
+const $ = id => document.getElementById(id);
+const pad = (hex) => hex.replace(/^0x/,"").padStart(64,"0");
+const encUint = n => pad(BigInt(n).toString(16));
+const encAddr = a => pad(a.toLowerCase());
+
+async function rpcCall(data){
+  let lastErr;
+  for (const url of RPCS){
+    try{
+      const res = await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({jsonrpc:"2.0",method:"eth_call",params:[{to:NFT,data},"latest"],id:1})});
+      const j = await res.json();
+      if (j.result) return j.result;
+      lastErr = new Error(j.error ? j.error.message : "empty result");
+    }catch(e){ lastErr = e; }
+  }
+  throw lastErr || new Error("all RPC endpoints failed");
+}
+const callUint = async (data) => BigInt(await rpcCall(data));
+function decodeString(hex){
+  const b = new Uint8Array(hex.slice(2).match(/../g).map(h=>parseInt(h,16)));
+  const len = Number(BigInt("0x"+[...b.slice(32,64)].map(x=>x.toString(16).padStart(2,"0")).join("")));
+  return new TextDecoder().decode(b.slice(64,64+len));
+}
+async function fetchSqueekById(id){
+  const uri = decodeString(await rpcCall(SEL.tokenURI + encUint(id)));
+  const meta = JSON.parse(atob(uri.split(",")[1]));
+  return { id: Number(id), name: meta.name, image: meta.image, attributes: meta.attributes || [] };
+}
+async function fetchOwned(addr, max){
+  const bal = Number(await callUint(SEL.balanceOf + encAddr(addr)));
+  if (bal === 0) return { bal, squeeks: [] };
+  // The NFT contract is not enumerable, so list this wallet's token ids via the public explorer API,
+  // then read each token's art/traits from the contract itself.
+  const res = await fetch(`https://eth-sepolia.blockscout.com/api/v2/addresses/${addr}/nft?type=ERC-721`);
+  const j = await res.json();
+  const items = (j.items || []).filter(it => it.token && it.token.address && it.token.address.toLowerCase() === NFT);
+  const out = [];
+  for (const it of items.slice(0, max)){
+    try { out.push(await fetchSqueekById(Number(it.id))); }
+    catch(e){ if (it.image_url) out.push({ id: Number(it.id), name: "Squeek #"+it.id, image: it.image_url, attributes: [] }); }
+  }
+  return { bal, squeeks: out };
+}
+
+let supply = 0, lock = false, first = null, moves = 0, found = 0, totalPairs = 8;
+let timer = null, seconds = 0, started = false;
+
+function fmt(s){ return Math.floor(s/60)+":"+String(s%60).padStart(2,"0"); }
+function showBest(){
+  const b = localStorage.getItem("squeekmatch-best-"+totalPairs);
+  $("best").textContent = b ? b+" moves" : "—";
+}
+function tick(){
+  if (!started) return;
+  if (!timer) timer = setInterval(()=>{ seconds++; $("time").textContent = fmt(seconds); },1000);
+}
+function resetStats(){
+  moves=0; found=0; seconds=0; started=false; first=null; lock=false;
+  if (timer){ clearInterval(timer); timer=null; }
+  $("moves").textContent="0"; $("found").textContent="0"; $("time").textContent="0:00";
+  $("total").textContent=totalPairs; showBest();
+}
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
+function buildBoard(squeeks){
+  const deck = shuffle(squeeks.flatMap(s => [s, s]));
+  const board = $("board");
+  board.className = "p"+totalPairs;
+  board.innerHTML = "";
+  deck.forEach(s => {
+    const card = document.createElement("button");
+    card.className = "card"; card.dataset.id = s.id;
+    card.innerHTML = `<div class="inner">
+        <div class="face back">🐹</div>
+        <div class="face front"><img alt="${s.name}" src="${s.image}"></div>
+      </div>`;
+    card.addEventListener("click", () => flip(card, s));
+    board.appendChild(card);
+  });
+  $("status").textContent = "Deck dealt from block-chain state just now. Flip two cards to find each pair.";
+}
+function flip(card, s){
+  if (lock || card.classList.contains("flip")) return;
+  started = true; tick();
+  card.classList.add("flip");
+  if (!first){ first = {card, s}; return; }
+  moves++; $("moves").textContent = moves;
+  if (first.s.id === s.id && first.card !== card){
+    first.card.classList.add("matched"); card.classList.add("matched");
+    found++; $("found").textContent = found;
+    first = null;
+    if (found === totalPairs) win();
+  } else {
+    lock = true;
+    const a = first.card; first = null;
+    setTimeout(()=>{ a.classList.remove("flip"); card.classList.remove("flip"); lock=false; }, 750);
+  }
+}
+function win(){
+  if (timer){ clearInterval(timer); timer=null; }
+  const key = "squeekmatch-best-"+totalPairs;
+  const prev = Number(localStorage.getItem(key) || 0);
+  if (!prev || moves < prev) localStorage.setItem(key, moves);
+  showBest();
+  $("winStats").textContent = `Cleared ${totalPairs} pairs in ${moves} moves and ${fmt(seconds)}.`;
+  const seen = new Map();
+  document.querySelectorAll(".card.matched").forEach(c => {});
+  // rebuild the unique list from the board dataset order is not kept; use current deck snapshot:
+  winDeck.forEach(s => seen.set(s.id, s));
+  $("winList").innerHTML = [...seen.values()].map(s => {
+    const traits = s.attributes.slice(0,3).map(a=>`${a.trait_type}: ${a.value}`).join(" · ");
+    return `<div class="winitem"><img src="${s.image}" alt="${s.name}"><b>${s.name}</b><br>${traits}<br>
+      <a target="_blank" rel="noopener" href="https://eth-sepolia.blockscout.com/token/${NFT}/instance/${s.id}">view on explorer ↗</a></div>`;
+  }).join("");
+  $("win").showModal();
+}
+let winDeck = [];
+
+async function deal(){
+  totalPairs = Number($("pairs").value);
+  resetStats();
+  $("deal").disabled = true;
+  $("status").textContent = "Reading Squeeks from the Squeekchain contract…";
+  try{
+    if (!supply) supply = Number(await callUint(SEL.totalSupply));
+    $("supply").textContent = supply.toLocaleString();
+    const used = new Set();
+    const squeeks = [];
+    let guard = 0;
+    while (squeeks.length < totalPairs && guard++ < totalPairs * 6){
+      const id = 1 + Math.floor(Math.random() * supply);
+      if (used.has(id)) continue;
+      used.add(id);
+      try { squeeks.push(await fetchSqueekById(id)); }
+      catch(e){ /* a flaky node dropped this one — draw another */ }
+    }
+    if (squeeks.length < totalPairs) throw new Error("could not load enough Squeeks");
+    winDeck = squeeks;
+    buildBoard(squeeks);
+  }catch(e){
+    $("status").innerHTML = `<span class="err">Could not reach the Sepolia RPC just now (${e.message}). Please try again.</span>`;
+  }
+  $("deal").disabled = false;
+}
+
+$("deal").addEventListener("click", deal);
+$("pairs").addEventListener("change", ()=>{ totalPairs = Number($("pairs").value); $("total").textContent = totalPairs; showBest(); });
+$("mineBtn").addEventListener("click", ()=> $("mineRow").classList.toggle("show"));
+$("loadMine").addEventListener("click", async () => {
+  const addr = $("addr").value.trim();
+  if (!/^0x[0-9a-fA-F]{40}$/.test(addr)){ $("status").innerHTML = `<span class="err">That doesn't look like a wallet address.</span>`; return; }
+  totalPairs = Number($("pairs").value);
+  resetStats();
+  $("status").textContent = "Reading your Squeeks from the chain (read-only)…";
+  try{
+    const { bal, squeeks } = await fetchOwned(addr, totalPairs);
+    if (bal === 0){ $("status").textContent = "This wallet holds no Squeeks yet — dealing a random deck instead."; return deal(); }
+    let deck = squeeks;
+    if (deck.length < totalPairs){
+      $("status").textContent = `You hold ${bal} Squeek(s) — topping the deck up with random ones.`;
+      if (!supply) supply = Number(await callUint(SEL.totalSupply));
+      const have = new Set(deck.map(s=>s.id));
+      let guard = 0;
+      while (deck.length < totalPairs && guard++ < totalPairs * 6){
+        const id = 1 + Math.floor(Math.random() * supply);
+        if (have.has(id)) continue;
+        have.add(id);
+        try { deck.push(await fetchSqueekById(id)); } catch(e){ /* draw another */ }
+      }
+    }
+    winDeck = deck.slice(0, totalPairs);
+    buildBoard(winDeck);
+  }catch(e){
+    $("status").innerHTML = `<span class="err">Read failed (${e.message}). The address may be on another network — Squeeks live on Sepolia.</span>`;
+  }
+});
+$("again").addEventListener("click", ()=>{ $("win").close(); deal(); });
+$("contractLink").href = "https://eth-sepolia.blockscout.com/token/"+NFT;
+showBest();
+deal();
+</script>
+</body>
+</html>
